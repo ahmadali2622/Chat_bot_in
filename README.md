@@ -122,7 +122,7 @@ GEMINI_API_KEY=your_actual_key_here
 
 ---
 
-## 🔧 Next Steps (Day 2 — RAG Pipeline)
+## 🔧 Next Steps (RAG Pipeline)
 
 1. Scrape NetSol Technologies website content (`requests` + `BeautifulSoup`)
 2. Chunk and embed the text (e.g. `sentence-transformers`)
