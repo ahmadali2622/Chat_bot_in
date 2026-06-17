@@ -1,4 +1,4 @@
-adjust read me # NetSol Chatbot — FastAPI + LangGraph + Gemini 2.5 Flash-Lite + React
+# NetSol Chatbot — FastAPI + LangGraph + Gemini 2.5 Flash-Lite + React
 ## 📁 Project Structure
 ```
 chatbot-project/
