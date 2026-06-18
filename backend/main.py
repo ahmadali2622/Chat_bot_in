@@ -33,9 +33,5 @@ def root():
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
-    # Each request starts from a clean state — no past messages are
-    # carried over, so previous chats are never stored or replayed.
-    result = chat_graph.invoke(
-        {"user_message": request.message, "context": "", "bot_response": ""}
-    )
+    result = chat_graph.invoke({"user_message": request.message, "bot_response": ""})
     return ChatResponse(reply=result["bot_response"])
