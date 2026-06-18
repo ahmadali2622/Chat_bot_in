@@ -14,13 +14,3 @@ langchain-text-splitters
 langchain-huggingface
 sentence-transformers
 chromadb
-
-# --- Web scraping ---
-requests
-beautifulsoup4
-
-# --- RAG pipeline ---
-langchain-text-splitters
-langchain-huggingface
-sentence-transformers
-chromadb
