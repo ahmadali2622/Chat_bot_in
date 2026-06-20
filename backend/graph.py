@@ -1,7 +1,8 @@
 """
 graph.py
 --------
-LangGraph definition for the chatbot.
+LangGraph definition for the chatbot, using LangChain's official
+Google Generative AI integration (langchain-google-genai).
 
 Flow:
     START -> retrieve_node -> chatbot_node -> END
@@ -9,27 +10,34 @@ Flow:
 retrieve_node looks up relevant chunks from the NETSOL website
 (stored in ChromaDB) that match the user's question.
 
-chatbot_node then sends the user's message + that retrieved context
-to Google's Gemini 2.5 Flash-Lite model to generate a grounded answer.
-
-Note on memory: this graph has no checkpointer/memory saver attached,
-and ChatState only ever holds the CURRENT message. That means every
-request is handled fresh - previous conversations are never stored
-or reused between calls, by design.
+chatbot_node sends the user's message + retrieved context to Gemini
+via LangChain's ChatGoogleGenerativeAI wrapper, which handles auth
+through the API key directly (not the raw google-genai SDK, which
+was switching to Vertex/OAuth mode on this machine).
 """
 
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
-from google import genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from config import GEMINI_API_KEY, GEMINI_MODEL
 from rag import retrieve_context
 
 
 # ---------------------------
-# 1. Configure Gemini Client
+# 1. Configure the Gemini chat model via LangChain
 # ---------------------------
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+# google_api_key is passed explicitly here rather than relying on an
+# env var name the library guesses on its own (GOOGLE_API_KEY vs
+# GEMINI_API_KEY) — this removes any ambiguity.
+llm = (
+    ChatGoogleGenerativeAI(
+        model=GEMINI_MODEL,
+        google_api_key=GEMINI_API_KEY,
+    )
+    if GEMINI_API_KEY
+    else None
+)
 
 
 # ---------------------------
@@ -61,29 +69,23 @@ def retrieve_node(state: ChatState) -> ChatState:
 
 def chatbot_node(state: ChatState) -> ChatState:
     """
-    Sends the user's message + retrieved context to Gemini 2.5 Flash-Lite
-    and returns its reply.
-    Falls back to an error message if the API call fails
-    (e.g. missing API key, network issue, rate limit).
+    Sends the user's message + retrieved context to Gemini via
+    LangChain's ChatGoogleGenerativeAI, and returns its reply.
     """
     user_message = state["user_message"]
     context = state.get("context", "")
 
-    if not GEMINI_API_KEY or client is None:
+    if not GEMINI_API_KEY or llm is None:
         return {
             "user_message": user_message,
             "context": context,
             "bot_response": "GEMINI_API_KEY is not set. Please add it to your .env file.",
         }
 
-    # Build a prompt that includes the retrieved context, so Gemini's
-    # answer is grounded in real NETSOL website content (this is the
-    # "Augmented Generation" part of RAG).
-    #
-    # Security note: retrieved context could in theory contain text that
-    # looks like instructions (this is called "prompt injection"). We wrap
-    # it in <context> tags and explicitly tell the model to treat it as
-    # data only, never as commands to follow.
+    # Same defensive prompt structure as before — wrap retrieved
+    # context in <context> tags and tell the model to treat it as
+    # data only, never as instructions (protects against prompt
+    # injection from scraped website content).
     if context:
         prompt = (
             "You are a helpful assistant answering questions about NETSOL Technologies.\n"
@@ -95,15 +97,11 @@ def chatbot_node(state: ChatState) -> ChatState:
             "Answer:"
         )
     else:
-        # No context found (e.g. ChromaDB empty) - fall back to a plain answer.
         prompt = user_message
 
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-        )
-        reply = response.text.strip() if response.text else "Sorry, I couldn't generate a response."
+        response = llm.invoke(prompt)
+        reply = response.content.strip() if response.content else "Sorry, I couldn't generate a response."
     except Exception as e:
         reply = f"Error calling Gemini API: {str(e)}"
 
